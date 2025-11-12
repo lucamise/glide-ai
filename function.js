@@ -261,8 +261,23 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			}
 		  }
 		  
+		  // Check permissions using Permissions API
+		  async function checkPermission() {
+			if ('permissions' in navigator) {
+			  try {
+				const result = await navigator.permissions.query({ name: 'geolocation' });
+				console.log('Permission status:', result.state);
+				return result.state;
+			  } catch (e) {
+				console.log('Permissions API not supported or error:', e);
+				return 'unknown';
+			  }
+			}
+			return 'unknown';
+		  }
+		  
 		  // Start tracking
-		  function startTracking() {
+		  async function startTracking() {
 			if (!navigator.geolocation) {
 			  document.getElementById('status').innerHTML = '❌ Geolocation not supported<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">Your browser does not support location services.</small>';
 			  document.getElementById('status').className = 'status-error';
@@ -270,12 +285,26 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			}
 			
 			const inIframe = isInIframe();
-			console.log('Starting location tracking...', { inIframe, origin: window.location.origin });
+			console.log('Starting location tracking...', { 
+			  inIframe, 
+			  origin: window.location.origin,
+			  parent: window.parent !== window ? window.parent.location.origin : 'none'
+			});
+			
+			// Check permission status first
+			const permissionStatus = await checkPermission();
+			console.log('Permission status:', permissionStatus);
+			
+			if (permissionStatus === 'denied') {
+			  handleError({ code: 1, message: 'Permission denied' }); // PERMISSION_DENIED = 1
+			  return;
+			}
 			
 			// Show permission request message with iframe-specific instructions
 			let permissionMsg = '📍 Requesting location permission...';
 			if (inIframe) {
-			  permissionMsg += '<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">If no prompt appears, click the location icon (📍) in your browser address bar to allow access for this site.</small>';
+			  permissionMsg += '<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">⚠️ Running in iframe - if no prompt appears, you need to grant permission for <strong>xaviigna.github.io</strong>. Click the location icon (📍) in your browser address bar, or click "Get Help" below.</small>';
+			  permissionMsg += '<br><button onclick="document.getElementById(\\'permission-help\\').style.display=\\'block\\'" style="margin-top: 8px; background: #ea580c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px;">Get Help</button>';
 			} else {
 			  permissionMsg += '<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">Please allow location access when prompted.</small>';
 			}
@@ -284,15 +313,15 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			
 			const options = {
 			  enableHighAccuracy: true,
-			  timeout: 15000, // Increased timeout for iframe scenarios
+			  timeout: 20000, // Increased timeout for iframe scenarios
 			  maximumAge: 0
 			};
 			
 			// Get initial position
-			console.log('Calling getCurrentPosition...');
+			console.log('Calling getCurrentPosition with options:', options);
 			navigator.geolocation.getCurrentPosition(
 			  (position) => {
-				console.log('Location obtained successfully:', position);
+				console.log('✅ Location obtained successfully:', position);
 				updateLocation(position);
 				
 				// Start watching if enabled
@@ -306,11 +335,24 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 				}
 			  },
 			  (error) => {
-				console.error('getCurrentPosition error:', error);
+				console.error('❌ getCurrentPosition error:', error);
+				console.error('Error code:', error.code);
+				console.error('Error message:', error.message);
 				handleError(error);
 			  },
 			  options
 			);
+			
+			// If no response after 5 seconds, show additional help
+			setTimeout(() => {
+			  const statusDiv = document.getElementById('status');
+			  if (statusDiv && statusDiv.className === 'status-waiting') {
+				console.log('No response after 5 seconds, showing additional help...');
+				if (inIframe) {
+				  statusDiv.innerHTML += '<br><small style="color: #ea580c; font-size: 11px; display: block; margin-top: 8px; font-weight: 600;">⚠️ Still waiting? The iframe may be blocked. Try opening <a href="https://xaviigna.github.io/-glide-location-tracker/" target="_blank" style="color: #4285f4; text-decoration: underline;">this page directly</a> to grant permission first.</small>';
+				}
+			  }
+			}, 5000);
 		  }
 		  
 		  // Stop tracking
