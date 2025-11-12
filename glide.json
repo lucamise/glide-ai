@@ -1,8 +1,8 @@
 [
 	{
 		"kind": "column",
-		"name": "Real-Time Location Tracker",
-		"description": "Display and track location on an interactive map. Use Glide's 'Starting Point' column to get coordinates, or pass latitude/longitude directly. Shows location on OpenStreetMap - no API keys required! Add a web-embed component to your layout, then select this column as the source. by @xaviigna",
+		"name": "Location Coordinates",
+		"description": "Extract coordinates (lat, lng) from Glide's Starting Point column or pass latitude/longitude directly. Returns coordinates as a string (e.g., '40.7128,-74.0060') or JSON. Perfect for combining lat and lng values in Glide. by @xaviigna",
 		"author": "xaviigna",
 		"params": [
 			{
@@ -21,18 +21,8 @@
 				"type": "string"
 			},
 			{
-				"name": "mapZoom",
-				"displayName": "Map Zoom Level (1-19)",
-				"type": "string"
-			},
-			{
-				"name": "useBrowserGeolocation",
-				"displayName": "Enable Browser Geolocation for Updates (true/false)",
-				"type": "string"
-			},
-			{
-				"name": "updateInterval",
-				"displayName": "Update Interval (ms, for browser geolocation)",
+				"name": "outputFormat",
+				"displayName": "Output Format (lat,lng, lng,lat, or json)",
 				"type": "string"
 			}
 		],
