@@ -80,12 +80,26 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 		<div id="map"></div>
 		<div id="status" class="status-waiting">📍 Requesting location permission...<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">Please allow location access when prompted by your browser.</small></div>
 		<div id="coordinates">Lat: --<br>Lng: --<br>Accuracy: --</div>
-		<div id="permission-help" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 255, 255, 0.98); padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 2000; max-width: 400px; text-align: center;">
-		  <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">📍 Location Permission Needed</h3>
-		  <p style="margin: 0 0 16px 0; font-size: 14px; color: #666; line-height: 1.5;">This plugin needs location permission for the GitHub Pages site. Click below to open it in a new tab and grant permission.</p>
-		  <button id="open-tab-btn" onclick="window.open('https://xaviigna.github.io/-glide-location-tracker/', '_blank')" style="background: #4285f4; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; margin-right: 8px;">Open in New Tab</button>
-		  <button onclick="document.getElementById('permission-help').style.display='none'" style="background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px;">Close</button>
-		</div>
+		<div id="permission-help" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+		  <div style="background: white; padding: 28px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); max-width: 520px; width: 100%; text-align: center; position: relative;">
+			<button onclick="document.getElementById('permission-help').style.display='none'" style="position: absolute; top: 12px; right: 12px; background: transparent; border: none; font-size: 24px; cursor: pointer; color: #999; width: 32px; height: 32px; line-height: 1; padding: 0;">×</button>
+			<h3 style="margin: 0 0 16px 0; font-size: 20px; color: #333; font-weight: 600;">📍 Location Permission Required</h3>
+			<p style="margin: 0 0 20px 0; font-size: 15px; color: #666; line-height: 1.6;">This plugin runs in an iframe and needs location permission for <strong style="color: #333;">xaviigna.github.io</strong>. Browsers block location access in iframes by default.</p>
+			<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 14px; border-radius: 6px; margin: 20px 0; text-align: left;">
+			  <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #856404;">How to fix:</p>
+			  <ol style="margin: 0; padding-left: 22px; font-size: 14px; color: #856404; line-height: 2;">
+				<li>Click "Open in New Tab" button below</li>
+				<li>Allow location permission when the browser prompts you</li>
+				<li>Come back to this Glide app and refresh the page</li>
+			  </ol>
+			</div>
+			<div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
+			  <button id="open-tab-btn" onclick="window.open('https://xaviigna.github.io/-glide-location-tracker/', '_blank')" style="background: #4285f4; color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3); transition: all 0.2s;">Open in New Tab</button>
+			  <button onclick="document.getElementById('permission-help').style.display='none'" style="background: #e0e0e0; color: #333; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-size: 15px;">Close</button>
+			</div>
+			<p style="margin: 20px 0 0 0; font-size: 12px; color: #999;">After granting permission, refresh this page for the plugin to work.</p>
+	  </div>
+	  </div>
 		
 		<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 	  <script>
@@ -343,16 +357,19 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			  options
 			);
 			
-			// If no response after 5 seconds, show additional help
-			setTimeout(() => {
-			  const statusDiv = document.getElementById('status');
-			  if (statusDiv && statusDiv.className === 'status-waiting') {
-				console.log('No response after 5 seconds, showing additional help...');
-				if (inIframe) {
-				  statusDiv.innerHTML += '<br><small style="color: #ea580c; font-size: 11px; display: block; margin-top: 8px; font-weight: 600;">⚠️ Still waiting? The iframe may be blocked. Try opening <a href="https://xaviigna.github.io/-glide-location-tracker/" target="_blank" style="color: #4285f4; text-decoration: underline;">this page directly</a> to grant permission first.</small>';
+			// If no response after 3 seconds in iframe, automatically show help modal
+			if (inIframe) {
+			  setTimeout(() => {
+				const statusDiv = document.getElementById('status');
+				if (statusDiv && (statusDiv.className === 'status-waiting' || statusDiv.className.includes('status-waiting'))) {
+				  console.log('No response after 3 seconds in iframe, showing help modal...');
+				  const helpModal = document.getElementById('permission-help');
+				  if (helpModal) {
+					helpModal.style.display = 'flex';
+				  }
 				}
-			  }
-			}, 5000);
+			  }, 3000);
+			}
 		  }
 		  
 		  // Stop tracking
