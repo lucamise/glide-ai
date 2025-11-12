@@ -9,13 +9,14 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 		return "";
 	}
 	
-	// Return HTML that automatically gets location from device and displays coordinates
+	// Return HTML that automatically gets location from device and displays map + coordinates
 	const html = `
 <!DOCTYPE html>
 <html>
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 	<style>
 		* {
 			margin: 0;
@@ -24,63 +25,41 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 		}
 		body {
 			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+			height: 100vh;
+			overflow: hidden;
 			display: flex;
-			align-items: center;
-			justify-content: center;
-			min-height: 100vh;
-			background: #f5f5f5;
-			padding: 20px;
-		}
-		.container {
-			background: white;
-			border-radius: 12px;
-			padding: 24px;
-			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-			max-width: 400px;
-			width: 100%;
+			flex-direction: column;
 		}
 		.header {
+			background: white;
+			padding: 12px 16px;
+			border-bottom: 1px solid #e5e5e5;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			z-index: 1000;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+		}
+		.header-left {
 			display: flex;
 			align-items: center;
 			gap: 8px;
-			margin-bottom: 16px;
 		}
 		.header-icon {
-			width: 24px;
-			height: 24px;
+			width: 20px;
+			height: 20px;
 			color: #4285f4;
 		}
 		.header-title {
-			font-size: 18px;
-	  font-weight: 600;
-			color: #1a1a1a;
-		}
-		.coordinates {
 			font-size: 16px;
+			font-weight: 600;
 			color: #1a1a1a;
-			text-align: center;
-			line-height: 1.8;
-			font-family: 'Monaco', 'Courier New', monospace;
-			background: #f8f9fa;
-			padding: 16px;
-			border-radius: 8px;
-			margin-bottom: 12px;
-			word-break: break-all;
-			min-height: 60px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-		}
-		.coordinates.empty {
-			color: #999;
 		}
 		.status {
-			font-size: 13px;
+			font-size: 12px;
 			color: #666;
-			text-align: center;
 			display: flex;
 			align-items: center;
-			justify-content: center;
 			gap: 6px;
 		}
 		.status.error {
@@ -93,22 +72,40 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 			color: #ea580c;
 		}
 		.status-icon {
-			width: 16px;
-			height: 16px;
+			width: 14px;
+			height: 14px;
+		}
+		#map {
+			flex: 1;
+			width: 100%;
+			z-index: 1;
+		}
+		.coordinates-panel {
+			background: white;
+			padding: 12px 16px;
+			border-top: 1px solid #e5e5e5;
+			box-shadow: 0 -2px 4px rgba(0,0,0,0.05);
+			z-index: 1000;
+		}
+		.coordinates {
+			font-size: 13px;
+			color: #1a1a1a;
+			font-family: 'Monaco', 'Courier New', monospace;
+			text-align: center;
+			margin-bottom: 8px;
 		}
 		.details {
-			margin-top: 12px;
-			padding-top: 12px;
-			border-top: 1px solid #e5e5e5;
-			font-size: 12px;
-			color: #666;
 			display: flex;
-			justify-content: space-between;
+			justify-content: center;
+			gap: 24px;
+			font-size: 11px;
+			color: #666;
 		}
 		.detail-item {
 			display: flex;
 			flex-direction: column;
-			gap: 4px;
+			align-items: center;
+			gap: 2px;
 		}
 		.detail-label {
 			color: #999;
@@ -117,25 +114,44 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 			color: #333;
 			font-weight: 500;
 		}
+		.loading {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			background: white;
+			padding: 16px 24px;
+			border-radius: 8px;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+			z-index: 2000;
+			text-align: center;
+		}
 	</style>
 </head>
 <body>
-	<div class="container">
-		<div class="header">
+	<div class="header">
+		<div class="header-left">
 			<svg class="header-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
 			</svg>
 			<div class="header-title">Location Tracker</div>
 		</div>
-		<div id="coordinates" class="coordinates empty">Getting location...</div>
 		<div id="status" class="status waiting">
 			<svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 			</svg>
-			<span>Requesting location...</span>
+			<span>Getting location...</span>
 		</div>
-		<div id="details" class="details" style="display: none;">
+	</div>
+	<div id="map"></div>
+	<div id="loading" class="loading" style="display: block;">
+		<div style="margin-bottom: 8px;">📍</div>
+		<div style="font-size: 14px; color: #666;">Loading map...</div>
+	</div>
+	<div class="coordinates-panel" style="display: none;">
+		<div id="coordinates" class="coordinates">--</div>
+		<div id="details" class="details">
 			<div class="detail-item">
 				<span class="detail-label">Accuracy</span>
 				<span id="accuracy" class="detail-value">--</span>
@@ -146,10 +162,73 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 			</div>
 		</div>
 	</div>
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 	<script>
+		let map = null;
+		let marker = null;
+		let circle = null;
 		let watchId = null;
 		let lastCoordinates = null;
 		let updateCount = 0;
+		
+		// Initialize map
+		function initMap(lat, lng) {
+			if (map) {
+				map.setView([lat, lng], map.getZoom());
+				return;
+			}
+			
+			// Create map
+			map = L.map('map').setView([lat, lng], 16);
+			
+			// Add OpenStreetMap tiles (same as Vercel app)
+			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+				attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+				maxZoom: 19
+			}).addTo(map);
+			
+			// Hide loading
+			document.getElementById('loading').style.display = 'none';
+			document.querySelector('.coordinates-panel').style.display = 'block';
+		}
+		
+		// Update map with new location
+		function updateMap(lat, lng, accuracy) {
+			if (!map) {
+				initMap(lat, lng);
+			}
+			
+			// Update marker
+			if (marker) {
+				marker.setLatLng([lat, lng]);
+			} else {
+				marker = L.marker([lat, lng], {
+					icon: L.divIcon({
+						className: 'custom-marker',
+						html: '<div style="background: #4285f4; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
+						iconSize: [24, 24],
+						iconAnchor: [12, 12]
+					})
+				}).addTo(map);
+			}
+			
+			// Update accuracy circle
+			if (circle) {
+				circle.setLatLng([lat, lng]);
+				circle.setRadius(accuracy);
+			} else {
+				circle = L.circle([lat, lng], {
+					radius: accuracy,
+					color: '#4285f4',
+					fillColor: '#4285f4',
+					fillOpacity: 0.1,
+					weight: 2
+				}).addTo(map);
+			}
+			
+			// Auto-center map (smooth pan)
+			map.setView([lat, lng], map.getZoom(), { animate: true, duration: 0.5 });
+		}
 		
 		// Format coordinates based on output format
 		function formatCoordinates(lat, lng, format) {
@@ -169,13 +248,14 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 			const formatted = formatCoordinates(lat, lng, "${outputFormat}");
 			const coordinatesEl = document.getElementById('coordinates');
 			const statusEl = document.getElementById('status');
-			const detailsEl = document.getElementById('details');
 			const accuracyEl = document.getElementById('accuracy');
 			const updatesEl = document.getElementById('updates');
 			
+			// Update map
+			updateMap(lat, lng, accuracy);
+			
 			// Update coordinates display
 			coordinatesEl.textContent = formatted;
-			coordinatesEl.classList.remove('empty');
 			
 			// Update status
 			statusEl.innerHTML = \`
@@ -189,7 +269,6 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 			// Update details
 			accuracyEl.textContent = Math.round(accuracy) + 'm';
 			updatesEl.textContent = updateCount;
-			detailsEl.style.display = 'flex';
 			
 			lastCoordinates = formatted;
 			
@@ -255,6 +334,7 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 					<span>Geolocation not supported</span>
 				\`;
 				statusEl.className = 'status error';
+				document.getElementById('loading').style.display = 'none';
 				return;
 			}
 			
@@ -269,7 +349,7 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 				}
 			);
 			
-			// Start watching for continuous updates
+			// Start watching for continuous updates (like Vercel app)
 			watchId = navigator.geolocation.watchPosition(
 				onLocationSuccess,
 				onLocationError,
@@ -280,7 +360,7 @@ window.function = function (useBrowserGeolocation, outputFormat, updateInterval)
 				}
 			);
 			
-			console.log('✅ Location tracking started - Updates every ${updateInterval}ms');
+			console.log('✅ Location tracking started - Using watchPosition (like Vercel app)');
 		}
 		
 		// Start tracking when page loads

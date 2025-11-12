@@ -1,28 +1,23 @@
 [
 	{
 		"kind": "column",
-		"name": "Location Coordinates",
-		"description": "Extract coordinates (lat, lng) from Glide's Starting Point column or pass latitude/longitude directly. Returns coordinates as a string (e.g., '40.7128,-74.0060') or JSON. Perfect for combining lat and lng values in Glide. by @xaviigna",
+		"name": "Auto Location Tracker",
+		"description": "Automatically gets location from device and displays on interactive map with coordinates. Uses OpenStreetMap (same as Vercel app) - no API keys needed! Real-time tracking with auto-centering map. Perfect for location tracking in Glide. by @xaviigna",
 		"author": "xaviigna",
 		"params": [
 			{
-				"name": "startingPoint",
-				"displayName": "Starting Point (Glide location column)",
-				"type": "string"
-			},
-			{
-				"name": "latitude",
-				"displayName": "Latitude (optional - if not using Starting Point)",
-				"type": "string"
-			},
-			{
-				"name": "longitude",
-				"displayName": "Longitude (optional - if not using Starting Point)",
+				"name": "useBrowserGeolocation",
+				"displayName": "Enable Browser Geolocation (true/false)",
 				"type": "string"
 			},
 			{
 				"name": "outputFormat",
 				"displayName": "Output Format (lat,lng, lng,lat, or json)",
+				"type": "string"
+			},
+			{
+				"name": "updateInterval",
+				"displayName": "Update Interval (ms) - e.g., 1000 for 1 second",
 				"type": "string"
 			}
 		],
