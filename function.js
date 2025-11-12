@@ -1,106 +1,310 @@
-window.function = function (startingPoint, latitude, longitude, outputFormat) {
+window.function = function (useBrowserGeolocation, outputFormat, updateInterval) {
 	// DYNAMIC VALUES
+	useBrowserGeolocation = useBrowserGeolocation?.value ?? "true";
 	outputFormat = outputFormat?.value ?? "lat,lng"; // "lat,lng" or "lng,lat" or "json"
+	updateInterval = updateInterval?.value ? parseInt(updateInterval.value) : 1000;
 	
-	// Parse Starting Point (Glide location column)
-	let lat = null;
-	let lng = null;
+	// If browser geolocation is disabled, return empty string
+	if (useBrowserGeolocation !== "true") {
+		return "";
+	}
 	
-	// Try Starting Point first (Glide's location column)
-	if (startingPoint?.value) {
-		const sp = startingPoint.value;
-		console.log('Starting Point raw value:', sp, 'Type:', typeof sp);
+	// Return HTML that automatically gets location from device and displays coordinates
+	const html = `
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 100vh;
+			background: #f5f5f5;
+			padding: 20px;
+		}
+		.container {
+			background: white;
+			border-radius: 12px;
+			padding: 24px;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+			max-width: 400px;
+			width: 100%;
+		}
+		.header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 16px;
+		}
+		.header-icon {
+			width: 24px;
+			height: 24px;
+			color: #4285f4;
+		}
+		.header-title {
+			font-size: 18px;
+	  font-weight: 600;
+			color: #1a1a1a;
+		}
+		.coordinates {
+			font-size: 16px;
+			color: #1a1a1a;
+			text-align: center;
+			line-height: 1.8;
+			font-family: 'Monaco', 'Courier New', monospace;
+			background: #f8f9fa;
+			padding: 16px;
+			border-radius: 8px;
+			margin-bottom: 12px;
+			word-break: break-all;
+			min-height: 60px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.coordinates.empty {
+			color: #999;
+		}
+		.status {
+			font-size: 13px;
+			color: #666;
+			text-align: center;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+		}
+		.status.error {
+			color: #dc2626;
+		}
+		.status.success {
+			color: #16a34a;
+		}
+		.status.waiting {
+			color: #ea580c;
+		}
+		.status-icon {
+			width: 16px;
+			height: 16px;
+		}
+		.details {
+			margin-top: 12px;
+			padding-top: 12px;
+			border-top: 1px solid #e5e5e5;
+			font-size: 12px;
+			color: #666;
+			display: flex;
+			justify-content: space-between;
+		}
+		.detail-item {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+		}
+		.detail-label {
+			color: #999;
+		}
+		.detail-value {
+			color: #333;
+			font-weight: 500;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<svg class="header-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+			</svg>
+			<div class="header-title">Location Tracker</div>
+		</div>
+		<div id="coordinates" class="coordinates empty">Getting location...</div>
+		<div id="status" class="status waiting">
+			<svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+			</svg>
+			<span>Requesting location...</span>
+		</div>
+		<div id="details" class="details" style="display: none;">
+			<div class="detail-item">
+				<span class="detail-label">Accuracy</span>
+				<span id="accuracy" class="detail-value">--</span>
+			</div>
+			<div class="detail-item">
+				<span class="detail-label">Updates</span>
+				<span id="updates" class="detail-value">0</span>
+			</div>
+		</div>
+	</div>
+	<script>
+		let watchId = null;
+		let lastCoordinates = null;
+		let updateCount = 0;
 		
-		// Starting Point can be in different formats:
-		// 1. String with coordinates: "40.7128,-74.0060" or "40.7128, -74.0060"
-		// 2. Object with lat/lng properties: {lat: 40.7128, lng: -74.0060}
-		// 3. JSON string: '{"lat": 40.7128, "lng": -74.0060}'
-		// 4. Glide location object with coordinates array: {coordinates: [lng, lat]}
-		
-		try {
-			if (typeof sp === 'string') {
-				// Try to parse as JSON first
-				try {
-					const parsed = JSON.parse(sp);
-					if (parsed.coordinates && Array.isArray(parsed.coordinates) && parsed.coordinates.length === 2) {
-						// Glide format: [longitude, latitude]
-						lng = parseFloat(parsed.coordinates[0]);
-						lat = parseFloat(parsed.coordinates[1]);
-					} else if (parsed.lat !== undefined && parsed.lng !== undefined) {
-						lat = parseFloat(parsed.lat);
-						lng = parseFloat(parsed.lng);
-					} else if (parsed.latitude !== undefined && parsed.longitude !== undefined) {
-						lat = parseFloat(parsed.latitude);
-						lng = parseFloat(parsed.longitude);
-					}
-				} catch (e) {
-					// Not JSON, try comma-separated format: "lat,lng" or "lng,lat"
-					const parts = sp.split(',');
-					if (parts.length === 2) {
-						const val1 = parseFloat(parts[0].trim());
-						const val2 = parseFloat(parts[1].trim());
-						// Check which is which (latitude is usually -90 to 90, longitude -180 to 180)
-						if (Math.abs(val1) <= 90 && Math.abs(val2) <= 180) {
-							lat = val1;
-							lng = val2;
-						} else if (Math.abs(val2) <= 90 && Math.abs(val1) <= 180) {
-							lng = val1;
-							lat = val2;
-						} else {
-							// Default: assume lat,lng
-							lat = val1;
-							lng = val2;
-						}
-					}
-				}
-			} else if (typeof sp === 'object' && sp !== null) {
-				// Direct object
-				if (sp.coordinates && Array.isArray(sp.coordinates) && sp.coordinates.length === 2) {
-					// Glide format: [longitude, latitude]
-					lng = parseFloat(sp.coordinates[0]);
-					lat = parseFloat(sp.coordinates[1]);
-				} else if (sp.lat !== undefined && sp.lng !== undefined) {
-					lat = parseFloat(sp.lat);
-					lng = parseFloat(sp.lng);
-				} else if (sp.latitude !== undefined && sp.longitude !== undefined) {
-					lat = parseFloat(sp.latitude);
-					lng = parseFloat(sp.longitude);
-				}
+		// Format coordinates based on output format
+		function formatCoordinates(lat, lng, format) {
+			if (format === "json") {
+				return JSON.stringify({ lat: lat, lng: lng, latitude: lat, longitude: lng });
+			} else if (format === "lng,lat") {
+				return lng.toFixed(6) + "," + lat.toFixed(6);
+			} else {
+				// Default: "lat,lng"
+				return lat.toFixed(6) + "," + lng.toFixed(6);
 			}
-		} catch (e) {
-			console.error('Error parsing Starting Point:', e);
 		}
-	}
-	
-	// Fallback to separate latitude/longitude parameters
-	if ((lat === null || lng === null || isNaN(lat) || isNaN(lng)) && latitude?.value && longitude?.value) {
-		lat = parseFloat(latitude.value);
-		lng = parseFloat(longitude.value);
-	}
-	
-	const hasValidLocation = lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-
-	// LOG SETTINGS TO CONSOLE
-	console.log(
-		`Starting Point: ${startingPoint?.value}\n` +
-			`Latitude: ${lat}\n` +
-			`Longitude: ${lng}\n` +
-			`Output Format: ${outputFormat}\n` +
-			`Has Valid Location: ${hasValidLocation}`
-	);
-	
-	// If we have valid coordinates, return them in the requested format
-	if (hasValidLocation) {
-		if (outputFormat === "json") {
-			return JSON.stringify({ lat: lat, lng: lng, latitude: lat, longitude: lng });
-		} else if (outputFormat === "lng,lat") {
-			return `${lng},${lat}`;
+		
+		// Update display with coordinates
+		function updateCoordinates(lat, lng, accuracy) {
+			updateCount++;
+			const formatted = formatCoordinates(lat, lng, "${outputFormat}");
+			const coordinatesEl = document.getElementById('coordinates');
+			const statusEl = document.getElementById('status');
+			const detailsEl = document.getElementById('details');
+			const accuracyEl = document.getElementById('accuracy');
+			const updatesEl = document.getElementById('updates');
+			
+			// Update coordinates display
+			coordinatesEl.textContent = formatted;
+			coordinatesEl.classList.remove('empty');
+			
+			// Update status
+			statusEl.innerHTML = \`
+				<svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<span>Tracking active</span>
+			\`;
+			statusEl.className = 'status success';
+			
+			// Update details
+			accuracyEl.textContent = Math.round(accuracy) + 'm';
+			updatesEl.textContent = updateCount;
+			detailsEl.style.display = 'flex';
+			
+			lastCoordinates = formatted;
+			
+			// Send coordinates to Glide parent via postMessage
+			if (window.parent && window.parent !== window) {
+				window.parent.postMessage({
+					type: 'location-coordinates',
+					data: {
+						coordinates: formatted,
+						lat: lat,
+						lng: lng,
+						accuracy: accuracy,
+						format: "${outputFormat}",
+						updateCount: updateCount
+					}
+				}, '*');
+			}
+		}
+		
+		// Handle geolocation success
+		function onLocationSuccess(position) {
+			const lat = position.coords.latitude;
+			const lng = position.coords.longitude;
+			const accuracy = position.coords.accuracy;
+			updateCoordinates(lat, lng, accuracy);
+		}
+		
+		// Handle geolocation error
+		function onLocationError(error) {
+			const statusEl = document.getElementById('status');
+			let message = 'Location unavailable';
+			if (error.code === 1) {
+				message = 'Permission denied - Please allow location access';
+			} else if (error.code === 2) {
+				message = 'Location unavailable - Check GPS/network';
+			} else if (error.code === 3) {
+				message = 'Timeout - Retrying...';
+			}
+			statusEl.innerHTML = \`
+				<svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<span>\${message}</span>
+			\`;
+			statusEl.className = 'status error';
+			
+			// Still try to get location
+			setTimeout(() => {
+				if (navigator.geolocation) {
+					navigator.geolocation.getCurrentPosition(onLocationSuccess, onLocationError);
+				}
+			}, 2000);
+		}
+		
+		// Start getting location
+		function startTracking() {
+			if (!navigator.geolocation) {
+				const statusEl = document.getElementById('status');
+				statusEl.innerHTML = \`
+					<svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+					<span>Geolocation not supported</span>
+				\`;
+				statusEl.className = 'status error';
+				return;
+			}
+			
+			// Get initial position
+			navigator.geolocation.getCurrentPosition(
+				onLocationSuccess,
+				onLocationError,
+				{
+					enableHighAccuracy: true,
+					timeout: 10000,
+					maximumAge: 0
+				}
+			);
+			
+			// Start watching for continuous updates
+			watchId = navigator.geolocation.watchPosition(
+				onLocationSuccess,
+				onLocationError,
+				{
+					enableHighAccuracy: true,
+					timeout: ${updateInterval},
+					maximumAge: 0
+				}
+			);
+			
+			console.log('✅ Location tracking started - Updates every ${updateInterval}ms');
+		}
+		
+		// Start tracking when page loads
+		window.addEventListener('load', startTracking);
+		
+		// Cleanup on unload
+		window.addEventListener('beforeunload', function() {
+			if (watchId !== null) {
+				navigator.geolocation.clearWatch(watchId);
+			}
+		});
+		
+		// Also try immediately (in case page is already loaded)
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', startTracking);
 		} else {
-			// Default: "lat,lng"
-			return `${lat},${lng}`;
+			startTracking();
 		}
-	}
+	  </script>
+</body>
+</html>
+	  `;
 	
-	// Return empty string if no location found
-	return "";
+	// Return as data URL
+	const encodedHtml = encodeURIComponent(html);
+	return "data:text/html;charset=utf-8," + encodedHtml;
 };
