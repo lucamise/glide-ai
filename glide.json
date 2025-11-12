@@ -2,17 +2,22 @@
 	{
 		"kind": "column",
 		"name": "Real-Time Location Tracker",
-		"description": "Track and display user's real-time location on an interactive map. Shows live coordinates, accuracy, and updates. Uses OpenStreetMap - no API keys required! Add a web-embed component to your layout, then select this column as the source by @xaviigna",
+		"description": "Display and track location on an interactive map. Use Glide's 'Starting Point' column to get coordinates, or pass latitude/longitude directly. Shows location on OpenStreetMap - no API keys required! Add a web-embed component to your layout, then select this column as the source. by @xaviigna",
 		"author": "xaviigna",
 		"params": [
 			{
-				"name": "enableTracking",
-				"displayName": "Enable Real-Time Tracking (true/false)",
+				"name": "startingPoint",
+				"displayName": "Starting Point (Glide location column)",
 				"type": "string"
 			},
 			{
-				"name": "updateInterval",
-				"displayName": "Update Interval (ms, e.g., 1000)",
+				"name": "latitude",
+				"displayName": "Latitude (optional - if not using Starting Point)",
+				"type": "string"
+			},
+			{
+				"name": "longitude",
+				"displayName": "Longitude (optional - if not using Starting Point)",
 				"type": "string"
 			},
 			{
@@ -21,8 +26,13 @@
 				"type": "string"
 			},
 			{
-				"name": "showHistory",
-				"displayName": "Show Location History Trail (true/false)",
+				"name": "useBrowserGeolocation",
+				"displayName": "Enable Browser Geolocation for Updates (true/false)",
+				"type": "string"
+			},
+			{
+				"name": "updateInterval",
+				"displayName": "Update Interval (ms, for browser geolocation)",
 				"type": "string"
 			}
 		],

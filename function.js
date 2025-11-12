@@ -1,17 +1,100 @@
-window.function = function (enableTracking, updateInterval, mapZoom, showHistory) {
+window.function = function (startingPoint, latitude, longitude, mapZoom, useBrowserGeolocation, updateInterval) {
 	// DYNAMIC VALUES
-	enableTracking = enableTracking.value ?? "true";
-	updateInterval = updateInterval.value ?? "1000";
-	mapZoom = mapZoom.value ?? "16";
-	showHistory = showHistory.value ?? "false";
+	mapZoom = mapZoom?.value ? parseInt(mapZoom.value) : 16;
+	useBrowserGeolocation = useBrowserGeolocation?.value ?? "true";
+	updateInterval = updateInterval?.value ? parseInt(updateInterval.value) : 1000;
+	
+	// Parse Starting Point (Glide location column)
+	let lat = null;
+	let lng = null;
+	
+	// Try Starting Point first (Glide's location column)
+	if (startingPoint?.value) {
+		const sp = startingPoint.value;
+		console.log('Starting Point raw value:', sp, 'Type:', typeof sp);
+		
+		// Starting Point can be in different formats:
+		// 1. String with coordinates: "40.7128,-74.0060" or "40.7128, -74.0060"
+		// 2. Object with lat/lng properties: {lat: 40.7128, lng: -74.0060}
+		// 3. JSON string: '{"lat": 40.7128, "lng": -74.0060}'
+		// 4. Glide location object with coordinates array: {coordinates: [lng, lat]}
+		
+		try {
+			if (typeof sp === 'string') {
+				// Try to parse as JSON first
+				try {
+					const parsed = JSON.parse(sp);
+					if (parsed.coordinates && Array.isArray(parsed.coordinates) && parsed.coordinates.length === 2) {
+						// Glide format: [longitude, latitude]
+						lng = parseFloat(parsed.coordinates[0]);
+						lat = parseFloat(parsed.coordinates[1]);
+					} else if (parsed.lat !== undefined && parsed.lng !== undefined) {
+						lat = parseFloat(parsed.lat);
+						lng = parseFloat(parsed.lng);
+					} else if (parsed.latitude !== undefined && parsed.longitude !== undefined) {
+						lat = parseFloat(parsed.latitude);
+						lng = parseFloat(parsed.longitude);
+					}
+				} catch (e) {
+					// Not JSON, try comma-separated format: "lat,lng" or "lng,lat"
+					const parts = sp.split(',');
+					if (parts.length === 2) {
+						const val1 = parseFloat(parts[0].trim());
+						const val2 = parseFloat(parts[1].trim());
+						// Check which is which (latitude is usually -90 to 90, longitude -180 to 180)
+						if (Math.abs(val1) <= 90 && Math.abs(val2) <= 180) {
+							lat = val1;
+							lng = val2;
+						} else if (Math.abs(val2) <= 90 && Math.abs(val1) <= 180) {
+							lng = val1;
+							lat = val2;
+						} else {
+							// Default: assume lat,lng
+							lat = val1;
+							lng = val2;
+						}
+					}
+				}
+			} else if (typeof sp === 'object' && sp !== null) {
+				// Direct object
+				if (sp.coordinates && Array.isArray(sp.coordinates) && sp.coordinates.length === 2) {
+					// Glide format: [longitude, latitude]
+					lng = parseFloat(sp.coordinates[0]);
+					lat = parseFloat(sp.coordinates[1]);
+				} else if (sp.lat !== undefined && sp.lng !== undefined) {
+					lat = parseFloat(sp.lat);
+					lng = parseFloat(sp.lng);
+				} else if (sp.latitude !== undefined && sp.longitude !== undefined) {
+					lat = parseFloat(sp.latitude);
+					lng = parseFloat(sp.longitude);
+				}
+			}
+		} catch (e) {
+			console.error('Error parsing Starting Point:', e);
+		}
+	}
+	
+	// Fallback to separate latitude/longitude parameters
+	if ((lat === null || lng === null || isNaN(lat) || isNaN(lng)) && latitude?.value && longitude?.value) {
+		lat = parseFloat(latitude.value);
+		lng = parseFloat(longitude.value);
+	}
+	
+	const hasGlideLocation = lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 
 	// LOG SETTINGS TO CONSOLE
 	console.log(
-		`Enable Tracking: ${enableTracking}\n` +
-			`Update Interval: ${updateInterval}ms\n` +
+		`Starting Point: ${startingPoint?.value}\n` +
+			`Latitude: ${lat}\n` +
+			`Longitude: ${lng}\n` +
 			`Map Zoom: ${mapZoom}\n` +
-			`Show History: ${showHistory}`
+			`Use Browser Geolocation: ${useBrowserGeolocation}\n` +
+			`Has Glide Location: ${hasGlideLocation}`
 	);
+	
+	// Default location (New York City) if no coordinates provided
+	const defaultLat = 40.7128;
+	const defaultLng = -74.0060;
 
 	const customCSS = `
 	* { margin: 0; padding: 0; box-sizing: border-box; }
@@ -33,7 +116,7 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 	  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
 	  z-index: 1000;
 	  font-size: 13px;
-	  max-width: 300px;
+	  max-width: 320px;
 	}
 	#coordinates {
 	  position: absolute;
@@ -51,6 +134,7 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 	.status-active { color: #16a34a; }
 	.status-error { color: #dc2626; }
 	.status-waiting { color: #ea580c; }
+	.status-info { color: #2563eb; }
 	button {
 	  background: #4285f4;
 	  color: white;
@@ -61,7 +145,6 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 	  font-size: 12px;
 	  margin-top: 8px;
 	}
-
 	button:hover { background: #357ae8; }
 	button:disabled { background: #ccc; cursor: not-allowed; }
 	`;
@@ -74,32 +157,12 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-	  <style>${customCSS}</style>
+		<style>${customCSS}</style>
 	  </head>
 	  <body>
 		<div id="map"></div>
-		<div id="status" class="status-waiting">📍 Requesting location permission...<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">Please allow location access when prompted by your browser.</small></div>
-		<div id="coordinates">Lat: --<br>Lng: --<br>Accuracy: --</div>
-		<div id="permission-help" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-		  <div style="background: white; padding: 28px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); max-width: 520px; width: 100%; text-align: center; position: relative;">
-			<button onclick="document.getElementById('permission-help').style.display='none'" style="position: absolute; top: 12px; right: 12px; background: transparent; border: none; font-size: 24px; cursor: pointer; color: #999; width: 32px; height: 32px; line-height: 1; padding: 0;">×</button>
-			<h3 style="margin: 0 0 16px 0; font-size: 20px; color: #333; font-weight: 600;">📍 Location Permission Required</h3>
-			<p style="margin: 0 0 20px 0; font-size: 15px; color: #666; line-height: 1.6;">This plugin runs in an iframe and needs location permission for <strong style="color: #333;">xaviigna.github.io</strong>. Browsers block location access in iframes by default.</p>
-			<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 14px; border-radius: 6px; margin: 20px 0; text-align: left;">
-			  <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #856404;">How to fix:</p>
-			  <ol style="margin: 0; padding-left: 22px; font-size: 14px; color: #856404; line-height: 2;">
-				<li>Click "Open in New Tab" button below</li>
-				<li>Allow location permission when the browser prompts you</li>
-				<li>Come back to this Glide app and refresh the page</li>
-			  </ol>
-			</div>
-			<div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
-			  <button id="open-tab-btn" onclick="window.open('https://xaviigna.github.io/-glide-location-tracker/', '_blank')" style="background: #4285f4; color: white; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3); transition: all 0.2s;">Open in New Tab</button>
-			  <button onclick="document.getElementById('permission-help').style.display='none'" style="background: #e0e0e0; color: #333; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-size: 15px;">Close</button>
-			</div>
-			<p style="margin: 20px 0 0 0; font-size: 12px; color: #999;">After granting permission, refresh this page for the plugin to work.</p>
-	  </div>
-	  </div>
+		<div id="status" class="status-info">📍 Loading map...</div>
+		<div id="coordinates">Lat: --<br>Lng: --<br>Source: --<br>Updates: 0</div>
 		
 		<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 	  <script>
@@ -110,9 +173,16 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 		  let locationHistory = [];
 		  let isTracking = false;
 		  let polyline;
+		  let updateCount = 0;
+		  let locationSource = 'none'; // 'glide', 'browser', or 'none'
 		  
 		  // Initialize map
 		  function initMap(lat, lng) {
+			if (map) {
+			  map.setView([lat, lng], map.getZoom());
+			  return;
+			}
+			
 			map = L.map('map').setView([lat, lng], ${mapZoom});
 			
 			// OpenStreetMap tiles (free, no API key required)
@@ -131,41 +201,41 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			  })
 			}).addTo(map);
 			
-			// Create accuracy circle
+			// Create accuracy circle (smaller for Glide locations)
 			circle = L.circle([lat, lng], {
-			  radius: 50,
+			  radius: 20,
 			  color: '#4285f4',
 			  fillColor: '#4285f4',
 			  fillOpacity: 0.1,
 			  weight: 2
 			}).addTo(map);
 			
-			// Create polyline for history if enabled
-			if ('${showHistory}' === 'true') {
-			  polyline = L.polyline([], {
-				color: '#4285f4',
-				weight: 3,
-				opacity: 0.5
-			  }).addTo(map);
-			}
+			// Create polyline for history
+			polyline = L.polyline([], {
+			  color: '#4285f4',
+			  weight: 3,
+			  opacity: 0.5
+			}).addTo(map);
 		  }
 		  
-		  // Update location
-		  function updateLocation(position) {
-			const lat = position.coords.latitude;
-			const lng = position.coords.longitude;
-			const accuracy = position.coords.accuracy;
-			const timestamp = new Date(position.timestamp);
+		  // Update location from any source
+		  function updateLocationFromCoordinates(lat, lng, accuracy, source) {
+			accuracy = accuracy || 20; // Default accuracy
+			source = source || 'unknown';
+			locationSource = source;
+			updateCount++;
 			
 			// Store in history
-			locationHistory.push({ lat, lng, accuracy, timestamp: Date.now() });
+			locationHistory.push({ lat, lng, accuracy, timestamp: Date.now(), source });
 			
 			// Update display
+			const timestamp = new Date();
 			document.getElementById('coordinates').innerHTML = 
 			  \`Lat: \${lat.toFixed(6)}<br>
 			   Lng: \${lng.toFixed(6)}<br>
 			   Accuracy: \${Math.round(accuracy)}m<br>
-			   Updates: \${locationHistory.length}<br>
+			   Updates: \${updateCount}<br>
+			   Source: \${source}<br>
 			   Time: \${timestamp.toLocaleTimeString()}\`;
 			
 			// Update map
@@ -175,9 +245,9 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			  circle.setLatLng([lat, lng]);
 			  circle.setRadius(accuracy);
 			  
-			  // Update history trail if enabled
-			  if ('${showHistory}' === 'true' && polyline) {
-				const path = locationHistory.map(loc => [loc.lat, loc.lng]);
+			  // Update history trail
+			  if (polyline) {
+				const path = locationHistory.slice(-100).map(loc => [loc.lat, loc.lng]);
 				polyline.setLatLngs(path);
 			  }
 			} else {
@@ -186,7 +256,7 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			
 			// Update status
 			document.getElementById('status').innerHTML = 
-			  \`✅ Tracking active • \${locationHistory.length} updates\`;
+			  \`✅ Tracking active • \${updateCount} updates • Source: \${source}\`;
 			document.getElementById('status').className = 'status-active';
 			
 			// SEND TO GLIDE VIA POSTMESSAGE
@@ -197,9 +267,8 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 				  latitude: lat,
 				  longitude: lng,
 				  accuracy: accuracy,
-				  timestamp: position.timestamp,
-				  speed: position.coords.speed || null,
-				  heading: position.coords.heading || null
+				  timestamp: Date.now(),
+				  source: source
 				}
 			  }, '*');
 			}
@@ -207,188 +276,105 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			// STORE IN LOCALSTORAGE
 			localStorage.setItem('lastLocation', JSON.stringify({
 			  lat, lng, accuracy, 
-			  timestamp: position.timestamp,
-			  speed: position.coords.speed,
-			  heading: position.coords.heading
+			  timestamp: Date.now(),
+			  source: source
 			}));
 			
 			// Store history (last 100 points)
 			if (locationHistory.length > 100) {
 			  locationHistory = locationHistory.slice(-100);
 			}
-			if ('${showHistory}' === 'true') {
-			  localStorage.setItem('locationHistory', JSON.stringify(locationHistory.slice(-50)));
-			}
+			localStorage.setItem('locationHistory', JSON.stringify(locationHistory.slice(-50)));
 		  }
 		  
-		  // Handle errors
-		  function handleError(error) {
-			console.error('Geolocation error:', error);
-			let message = 'Unknown error';
-			let instructions = '';
-			const isInIframe = window.self !== window.top;
-			
-			switch(error.code) {
-			  case error.PERMISSION_DENIED:
-				message = '❌ Location permission denied';
-				if (isInIframe) {
-				  instructions = 'This plugin runs in an iframe and needs separate location permission. Click the location icon in your browser address bar (near the URL) to allow location access for the GitHub Pages site, or open this page directly in a new tab to grant permission.';
+		  // Update location from browser geolocation
+		  function updateLocationFromBrowser(position) {
+			const lat = position.coords.latitude;
+			const lng = position.coords.longitude;
+			const accuracy = position.coords.accuracy;
+			updateLocationFromCoordinates(lat, lng, accuracy, 'browser');
+		  }
+		  
+		  // Handle browser geolocation errors
+		  function handleBrowserGeolocationError(error) {
+			console.error('Browser geolocation error:', error);
+			if (locationSource === 'none' || locationSource === 'glide') {
+			  // Only show error if we don't have Glide location
+			  if (!${hasGlideLocation}) {
+				let message = '❌ Browser location unavailable';
+				if (error.code === 1) {
+				  message = '📍 Using Glide location (browser permission denied)';
+				  document.getElementById('status').innerHTML = message + '<br><small style="color: #666; font-size: 11px;">Glide location is being used as fallback.</small>';
+				  document.getElementById('status').className = 'status-info';
 				} else {
-				  instructions = 'Please allow location access in your browser settings. Look for the location icon in your browser address bar, or go to Settings → Privacy → Location Services.';
+				  document.getElementById('status').innerHTML = message;
+				  document.getElementById('status').className = 'status-error';
 				}
-				break;
-			  case error.POSITION_UNAVAILABLE:
-				message = '❌ Location unavailable';
-				instructions = 'Your device cannot determine your location. Check that GPS/Location Services are enabled in your device settings.';
-				break;
-			  case error.TIMEOUT:
-				message = '⏱️ Location request timeout';
-				instructions = 'The location request took too long. Please try again or check your internet connection.';
-				break;
-			}
-			let statusHTML = message + '<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px; line-height: 1.4;">' + instructions + '</small>';
-			
-			// Add a button to show help modal if in iframe and permission denied
-			if (isInIframe && error.code === error.PERMISSION_DENIED) {
-			  statusHTML += '<br><button onclick="document.getElementById(\'permission-help\').style.display=\'block\'" style="margin-top: 8px; background: #4285f4; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px;">Get Help with Permission</button>';
-			}
-			
-			document.getElementById('status').innerHTML = statusHTML;
-			document.getElementById('status').className = 'status-error';
-			
-			// Log to console for debugging
-			console.log('Error details:', {
-			  code: error.code,
-			  message: error.message,
-			  isInIframe: isInIframe,
-			  userAgent: navigator.userAgent,
-			  origin: window.location.origin
-			});
-		  }
-		  
-		  // Check if we're in an iframe
-		  function isInIframe() {
-			try {
-			  return window.self !== window.top;
-			} catch (e) {
-			  return true;
-			}
-		  }
-		  
-		  // Check permissions using Permissions API
-		  async function checkPermission() {
-			if ('permissions' in navigator) {
-			  try {
-				const result = await navigator.permissions.query({ name: 'geolocation' });
-				console.log('Permission status:', result.state);
-				return result.state;
-			  } catch (e) {
-				console.log('Permissions API not supported or error:', e);
-				return 'unknown';
 			  }
 			}
-			return 'unknown';
 		  }
 		  
-		  // Start tracking
-		  async function startTracking() {
-			if (!navigator.geolocation) {
-			  document.getElementById('status').innerHTML = '❌ Geolocation not supported<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">Your browser does not support location services.</small>';
-			  document.getElementById('status').className = 'status-error';
+		  // Start browser geolocation tracking (if enabled)
+		  function startBrowserTracking() {
+			if ('${useBrowserGeolocation}' !== 'true' || !navigator.geolocation) {
 			  return;
 			}
 			
-			const inIframe = isInIframe();
-			console.log('Starting location tracking...', { 
-			  inIframe, 
-			  origin: window.location.origin,
-			  parent: window.parent !== window ? window.parent.location.origin : 'none'
-			});
-			
-			// Check permission status first
-			const permissionStatus = await checkPermission();
-			console.log('Permission status:', permissionStatus);
-			
-			if (permissionStatus === 'denied') {
-			  handleError({ code: 1, message: 'Permission denied' }); // PERMISSION_DENIED = 1
-			  return;
-			}
-			
-			// Show permission request message with iframe-specific instructions
-			let permissionMsg = '📍 Requesting location permission...';
-			if (inIframe) {
-			  permissionMsg += '<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">⚠️ Running in iframe - if no prompt appears, you need to grant permission for <strong>xaviigna.github.io</strong>. Click the location icon (📍) in your browser address bar, or click "Get Help" below.</small>';
-			  permissionMsg += '<br><button onclick="document.getElementById(\\'permission-help\\').style.display=\\'block\\'" style="margin-top: 8px; background: #ea580c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px;">Get Help</button>';
-			} else {
-			  permissionMsg += '<br><small style="color: #666; font-size: 11px; display: block; margin-top: 5px;">Please allow location access when prompted.</small>';
-			}
-			document.getElementById('status').innerHTML = permissionMsg;
-			document.getElementById('status').className = 'status-waiting';
-			
+			console.log('Starting browser geolocation tracking...');
 			const options = {
 			  enableHighAccuracy: true,
-			  timeout: 20000, // Increased timeout for iframe scenarios
+			  timeout: 20000,
 			  maximumAge: 0
 			};
 			
 			// Get initial position
-			console.log('Calling getCurrentPosition with options:', options);
 			navigator.geolocation.getCurrentPosition(
 			  (position) => {
-				console.log('✅ Location obtained successfully:', position);
-				updateLocation(position);
+				console.log('✅ Browser location obtained:', position);
+				updateLocationFromBrowser(position);
 				
-				// Start watching if enabled
-				if ('${enableTracking}' === 'true' && !isTracking) {
+				// Start watching
+				if (!isTracking) {
 				  isTracking = true;
 				  watchId = navigator.geolocation.watchPosition(
-					updateLocation,
-					handleError,
-					{ ...options, timeout: parseInt('${updateInterval}') || 1000 }
+					updateLocationFromBrowser,
+					handleBrowserGeolocationError,
+					{ ...options, timeout: ${updateInterval} }
 				  );
 				}
 			  },
-			  (error) => {
-				console.error('❌ getCurrentPosition error:', error);
-				console.error('Error code:', error.code);
-				console.error('Error message:', error.message);
-				handleError(error);
-			  },
+			  handleBrowserGeolocationError,
 			  options
 			);
-			
-			// If no response after 3 seconds in iframe, automatically show help modal
-			if (inIframe) {
-			  setTimeout(() => {
-				const statusDiv = document.getElementById('status');
-				if (statusDiv && (statusDiv.className === 'status-waiting' || statusDiv.className.includes('status-waiting'))) {
-				  console.log('No response after 3 seconds in iframe, showing help modal...');
-				  const helpModal = document.getElementById('permission-help');
-				  if (helpModal) {
-					helpModal.style.display = 'flex';
-				  }
-				}
-			  }, 3000);
-			}
 		  }
 		  
-		  // Stop tracking
-		  function stopTracking() {
-			if (watchId) {
-			  navigator.geolocation.clearWatch(watchId);
-			  watchId = null;
-			  isTracking = false;
-			  document.getElementById('status').innerHTML = '⏸️ Tracking stopped';
-			  document.getElementById('status').className = 'status-waiting';
-			}
-		  }
-		  
-		  // Listen for messages from Glide
+		  // Listen for location updates from Glide via postMessage
 		  window.addEventListener('message', function(event) {
+			console.log('Received message from parent:', event.data);
+			
+			// Handle location update from Glide
+			if (event.data && event.data.type === 'location-update' && event.data.data) {
+			  const data = event.data.data;
+			  if (data.latitude && data.longitude) {
+				console.log('📍 Received location from Glide:', data);
+				updateLocationFromCoordinates(
+				  parseFloat(data.latitude),
+				  parseFloat(data.longitude),
+				  data.accuracy || 20,
+				  'glide'
+				);
+			  }
+			}
+			
+			// Handle other message types
 			if (event.data && event.data.type === 'stop-tracking') {
-			  stopTracking();
+			  if (watchId) {
+				navigator.geolocation.clearWatch(watchId);
+				watchId = null;
+				isTracking = false;
+			  }
 			} else if (event.data && event.data.type === 'start-tracking') {
-			  startTracking();
+			  startBrowserTracking();
 			} else if (event.data && event.data.type === 'get-location') {
 			  // Send current location on request
 			  const lastLoc = localStorage.getItem('lastLocation');
@@ -401,11 +387,44 @@ window.function = function (enableTracking, updateInterval, mapZoom, showHistory
 			}
 		  });
 		  
-		  // Start on load
-		  window.addEventListener('load', startTracking);
+		  // Initialize with Glide location if available
+		  function initialize() {
+			if (${hasGlideLocation}) {
+			  console.log('📍 Initializing with Glide location:', ${lat}, ${lng});
+			  initMap(${lat}, ${lng});
+			  updateLocationFromCoordinates(${lat}, ${lng}, 20, 'glide');
+			  document.getElementById('status').innerHTML = '✅ Using Glide location • Waiting for updates...';
+			  document.getElementById('status').className = 'status-active';
+			} else {
+			  console.log('📍 No Glide location, initializing with default location');
+			  initMap(${defaultLat}, ${defaultLng});
+			  document.getElementById('status').innerHTML = '⚠️ No location provided • Waiting for Glide location or browser permission...';
+			  document.getElementById('status').className = 'status-waiting';
+			}
+			
+			// Try browser geolocation as fallback/alternative
+			if ('${useBrowserGeolocation}' === 'true') {
+			  startBrowserTracking();
+			}
+			
+			// Request location from Glide parent (if possible)
+			if (window.parent && window.parent !== window) {
+			  console.log('Requesting location from Glide parent...');
+			  window.parent.postMessage({
+				type: 'request-location'
+			  }, '*');
+			}
+		  }
 		  
-		  // Cleanup
-		  window.addEventListener('beforeunload', stopTracking);
+		  // Start when page loads
+		  window.addEventListener('load', initialize);
+		  
+		  // Cleanup on unload
+		  window.addEventListener('beforeunload', function() {
+			if (watchId) {
+			  navigator.geolocation.clearWatch(watchId);
+			}
+		  });
 	  </script>
 	  </body>
 	  </html>
