@@ -33,7 +33,25 @@
 ### Step 3: Grant Location Permission
 1. When the plugin loads, browser will prompt for location permission
 2. Click **"Allow"** to enable location tracking
-3. Coordinates will start updating automatically!
+3. If permission is denied, click **"Request Permission"** button to try again
+4. Coordinates will start updating automatically!
+
+### ⚠️ Important: Iframe Permission Issue
+
+**Why the Vercel app works but Glide plugin doesn't?**
+- **Vercel app**: Runs in top-level window → Browser allows geolocation ✅
+- **Glide plugin**: Runs in iframe → Browser may block geolocation (security) ⚠️
+
+**Solution:**
+1. **Try the "Request Permission" button** - This often works
+2. **Check browser settings** - Allow location for the Glide app domain
+3. **Use HTTPS** - Geolocation requires secure connection
+4. **Check iframe permissions** - Some browsers require `allow="geolocation"` attribute on the iframe (Glide should handle this automatically)
+
+**If it still doesn't work:**
+- The plugin will show a helpful error message
+- Try accessing the plugin URL directly (not in Glide iframe)
+- Consider using Glide's native "Get Current Location" action as an alternative
 
 ### Step 4: Use Coordinates in Glide (Optional)
 1. The plugin displays coordinates in the Web Embed component
