@@ -1,25 +1,39 @@
-{
-  "name": "Random Number",
-  "description": "A random number",
-  "author": "Mark Probst <mark@glideapps.com>",
-  "params": [
-    {
-      "name": "key",
-      "displayName": "Key",
-      "type": "string"
-    },
-    {
-      "name": "min",
-      "displayName": "Minimum",
-      "type": "number"
-    },
-    {
-      "name": "max",
-      "displayName": "Maximum",
-      "type": "number"
-    }
-  ],
-  "result": {
-    "type": "number"
-  }
-}
+
+[
+	{
+		"kind": "column",
+		"name": "Custom AI (OpenAI/Anthropic)",
+		"description": "Use any AI model with custom prompts.",
+		"author": "xaviigna",
+		"params": [
+			{
+				"name": "prompt",
+				"displayName": "Prompt (what you want the AI to do)",
+				"type": "string"
+			},
+			{
+				"name": "apiKey",
+				"displayName": "API Key (OpenAI or Anthropic)",
+				"type": "string"
+			},
+			{
+				"name": "model",
+				"displayName": "Model (e.g., gpt-4o-mini, gpt-4, claude-3-5-sonnet-20241022)",
+				"type": "string"
+			},
+			{
+				"name": "temperature",
+				"displayName": "Temperature (0.0-2.0, creativity level)",
+				"type": "string"
+			},
+			{
+				"name": "maxTokens",
+				"displayName": "Max Tokens (maximum response length)",
+				"type": "string"
+			}
+		],
+		"result": {
+			"type": "string"
+		}
+	}
+]
