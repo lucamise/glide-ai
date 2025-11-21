@@ -2,7 +2,7 @@
 	{
 		"kind": "column",
 		"name": "Custom AI (All-in-One)",
-		"description": "Supports: OpenAI (gpt-4o), Anthropic (claude-3-5) & Google (gemini-1.5)",
+		"description": "Supports: OpenAI, Anthropic Claude & Google Gemini",
 		"author": "",
 		"params": [
 			{
@@ -17,9 +17,8 @@
 			},
 			{
 				"name": "model",
-				"displayName": "Model (es: gpt-4o, gemini-1.5-flash, claude-3-5-sonnet)",
+				"displayName": "Model (es: gpt-4o, gemini-1.5-flash, claude-3-5-sonnet). Write 'list' to see as a result the list of Google Gemini's models.",
 				"type": "string",
-				"defaultValue": "gpt-4o-mini"
 			},
 			{
 				"name": "temperature",
