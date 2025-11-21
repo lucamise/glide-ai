@@ -12,21 +12,14 @@
 			},
 			{
 				"name": "apiKey",
-				"displayName": "API Key (OpenAI / Anthropic / Google AI Studio)",
+				"displayName": "API Key (OpenAI / Anthropic / Gemini)",
 				"type": "string"
 			},
 			{
 				"name": "model",
-				"displayName": "Model (Scrivi: gpt-4o-mini, gpt-4o, claude-3-5-sonnet-20240620, gemini-1.5-flash, gemini-1.5-pro)",
+				"displayName": "Model (es: gpt-4o, gemini-1.5-flash, claude-3-5-sonnet)",
 				"type": "string",
-				"defaultValue": "gpt-4o-mini",
-				"enum": [
-					"gpt-4o-mini",
-					"gpt-4o",
-					"claude-3-5-sonnet-20240620",
-					"gemini-1.5-flash",
-					"gemini-1.5-pro"
-				]
+				"defaultValue": "gpt-4o-mini"
 			},
 			{
 				"name": "temperature",
@@ -36,7 +29,7 @@
 			},
 			{
 				"name": "maxTokens",
-				"displayName": "Max Tokens (Default: 500)",
+				"displayName": "Max Tokens (Default: 1000)",
 				"type": "string",
 				"defaultValue": "1000"
 			}
