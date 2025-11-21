@@ -16,6 +16,11 @@
 				"type": "string"
 			},
 			{
+				"name": "attachmentUrl",
+				"displayName": "Attachment URL (Optional)",
+				"type": "string"
+			},
+			{
 				"name": "model",
 				"displayName": "Model (es: gpt-4o, gemini-1.5-flash, claude-3-5-sonnet). Write list to see Gemini's available models",
 				"type": "string",
