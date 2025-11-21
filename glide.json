@@ -2,7 +2,7 @@
 	{
 		"kind": "column",
 		"name": "Custom AI (OpenAI/Anthropic)",
-		"description": "Use any AI model with custom prompts. Proud built by @xaviigna,
+		"description": "Use any AI model with custom prompts",
 		"author": "xaviigna",
 		"params": [
 			{
