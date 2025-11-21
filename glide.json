@@ -17,7 +17,7 @@
 			},
 			{
 				"name": "model",
-				"displayName": "Model (es: gpt-4o, gemini-1.5-flash, claude-3-5-sonnet). Write 'list' to see as a result the list of Google Gemini's models.",
+				"displayName": "Model (es: gpt-4o, gemini-1.5-flash, claude-3-5-sonnet). Write list to see as a result the list of Google Gemini's models.",
 				"type": "string",
 			},
 			{
