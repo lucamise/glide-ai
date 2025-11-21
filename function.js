@@ -1,7 +1,8 @@
-window.function = async function (prompt, apiKey, model, temperature, maxTokens) {
+window.function = async function (prompt, apiKey, attachmentUrl, model, temperature, maxTokens) {
     // DYNAMIC VALUES
     prompt = prompt?.value ?? "";
     apiKey = apiKey?.value ?? "";
+    attachmentUrl = attachmentUrl?.value ?? ""; // Nuovo parametro per il file
     model = model?.value ?? "gpt-4o-mini"; 
     temperature = temperature?.value ? parseFloat(temperature.value) : 0.7;
     maxTokens = maxTokens?.value ? parseInt(maxTokens.value) : 1000;
@@ -14,24 +15,19 @@ window.function = async function (prompt, apiKey, model, temperature, maxTokens)
     let modelLower = modelInput.toLowerCase();
 
     // --- FUNZIONALITÀ SPECIALE: LISTA MODELLI GEMINI ---
-    // Se l'utente scrive "list" o "help" nel campo model, mostriamo i modelli disponibili
     if (modelLower === "list" || modelLower === "help" || modelLower === "info") {
         try {
             const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
             const response = await fetch(listUrl);
             const data = await response.json();
             
-            if (data.error) {
-                return `Error listing models: ${data.error.message}`;
-            }
+            if (data.error) return `Error listing models: ${data.error.message}`;
 
             if (data.models) {
-                // Filtriamo solo i modelli che generano testo (escludiamo quelli per embedding)
                 const availableModels = data.models
                     .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-                    .map(m => m.name.replace("models/", "")) // Puliamo il nome (togliamo 'models/')
-                    .join(", "); // Li uniamo con una virgola
-                
+                    .map(m => m.name.replace("models/", ""))
+                    .join(", ");
                 return `AVAILABLE GEMINI MODELS:\n${availableModels}`;
             }
             return "No models found.";
@@ -41,10 +37,41 @@ window.function = async function (prompt, apiKey, model, temperature, maxTokens)
     }
 
     // --- LOGICA STANDARD DI GENERAZIONE ---
-
-    // Logica di selezione provider
     const isAnthropic = modelLower.startsWith("claude") || modelLower.startsWith("anthropic");
     const isGemini = modelLower.startsWith("gemini");
+
+    // --- NUOVA LOGICA: GESTIONE FILE (SOLO PER GEMINI) ---
+    // Se c'è un link al file, lo scarichiamo e lo convertiamo PRIMA di chiamare l'IA
+    let inlineDataPart = null;
+
+    if (attachmentUrl && attachmentUrl.trim() !== "" && isGemini) {
+        try {
+            const fileResponse = await fetch(attachmentUrl);
+            if (!fileResponse.ok) return "Error: Impossible to download the attachment.";
+
+            const mimeType = fileResponse.headers.get("content-type") || "image/jpeg"; // Rileviamo il tipo di file
+            const arrayBuffer = await fileResponse.arrayBuffer();
+            
+            // Conversione in Base64
+            let binary = '';
+            const bytes = new Uint8Array(arrayBuffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const base64Data = btoa(binary);
+
+            // Prepariamo l'oggetto specifico per Gemini
+            inlineDataPart = {
+                inline_data: {
+                    mime_type: mimeType,
+                    data: base64Data
+                }
+            };
+        } catch (e) {
+            return `Error processing attachment: ${e.message}`;
+        }
+    }
     
     let apiUrl = "";
     let headers = {};
@@ -68,14 +95,22 @@ window.function = async function (prompt, apiKey, model, temperature, maxTokens)
             };
         } else if (isGemini) {
             // --- GOOGLE GEMINI ---
-            // Rimuoviamo 'models/' se presente per sbaglio
             let cleanModel = modelInput.replace("models/", "");
-            
             apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
             
             headers = { "Content-Type": "application/json" };
+            
+            // Costruiamo le "parti" del messaggio
+            // 1. Il testo del prompt
+            let messageParts = [{ text: prompt }];
+            
+            // 2. Se abbiamo processato un file, lo aggiungiamo qui
+            if (inlineDataPart) {
+                messageParts.push(inlineDataPart);
+            }
+
             body = {
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [{ parts: messageParts }],
                 generationConfig: {
                     temperature: temperature,
                     maxOutputTokens: maxTokens
