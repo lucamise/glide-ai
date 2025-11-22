@@ -2,10 +2,17 @@ window.function = async function (prompt, apiKey, attachmentUrl, model, temperat
     // DYNAMIC VALUES
     prompt = prompt?.value ?? "";
     apiKey = apiKey?.value ?? "";
-    attachmentUrl = attachmentUrl?.value ?? ""; // Nuovo parametro per il file
+    attachmentUrl = attachmentUrl?.value ?? ""; 
     model = model?.value ?? "gpt-4o-mini"; 
     temperature = temperature?.value ? parseFloat(temperature.value) : 0.7;
     maxTokens = maxTokens?.value ? parseInt(maxTokens.value) : 1000;
+
+    // --- NUOVO CONTROLLO: PROMPT VUOTO ---
+    // Se il prompt è vuoto o contiene solo spazi, ci fermiamo qui.
+    // Restituiamo una stringa vuota così in Glide non appare nulla.
+    if (!prompt || prompt.trim() === "") {
+        return "";
+    }
 
     // Validate API Key immediately
     if (!apiKey || apiKey.trim() === "") return "Error: API Key is required";
@@ -40,8 +47,7 @@ window.function = async function (prompt, apiKey, attachmentUrl, model, temperat
     const isAnthropic = modelLower.startsWith("claude") || modelLower.startsWith("anthropic");
     const isGemini = modelLower.startsWith("gemini");
 
-    // --- NUOVA LOGICA: GESTIONE FILE (SOLO PER GEMINI) ---
-    // Se c'è un link al file, lo scarichiamo e lo convertiamo PRIMA di chiamare l'IA
+    // --- GESTIONE FILE (SOLO PER GEMINI) ---
     let inlineDataPart = null;
 
     if (attachmentUrl && attachmentUrl.trim() !== "" && isGemini) {
@@ -49,7 +55,7 @@ window.function = async function (prompt, apiKey, attachmentUrl, model, temperat
             const fileResponse = await fetch(attachmentUrl);
             if (!fileResponse.ok) return "Error: Impossible to download the attachment.";
 
-            const mimeType = fileResponse.headers.get("content-type") || "image/jpeg"; // Rileviamo il tipo di file
+            const mimeType = fileResponse.headers.get("content-type") || "image/jpeg"; 
             const arrayBuffer = await fileResponse.arrayBuffer();
             
             // Conversione in Base64
@@ -61,7 +67,6 @@ window.function = async function (prompt, apiKey, attachmentUrl, model, temperat
             }
             const base64Data = btoa(binary);
 
-            // Prepariamo l'oggetto specifico per Gemini
             inlineDataPart = {
                 inline_data: {
                     mime_type: mimeType,
@@ -100,11 +105,8 @@ window.function = async function (prompt, apiKey, attachmentUrl, model, temperat
             
             headers = { "Content-Type": "application/json" };
             
-            // Costruiamo le "parti" del messaggio
-            // 1. Il testo del prompt
             let messageParts = [{ text: prompt }];
             
-            // 2. Se abbiamo processato un file, lo aggiungiamo qui
             if (inlineDataPart) {
                 messageParts.push(inlineDataPart);
             }
